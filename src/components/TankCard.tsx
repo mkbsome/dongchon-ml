@@ -145,40 +145,36 @@ export function TankCard({ tank, onClick }: TankCardProps) {
   return (
     <div
       onClick={onClick}
-      className={`card-hover cursor-pointer transition-all duration-300 ${
+      className={`rounded-2xl p-5 cursor-pointer transition-all duration-300 ${
         hasAnomaly
-          ? 'border-l-4 border-l-red-500 shadow-md ring-2 ring-red-100'
+          ? 'bg-gradient-to-br from-red-500 to-orange-600 text-white shadow-lg shadow-red-200'
           : isActive
-          ? 'border-l-4 border-l-green-500 shadow-md'
-          : 'border-l-4 border-l-gray-300'
+          ? 'bg-gradient-to-br from-blue-500 to-emerald-500 text-white shadow-lg shadow-blue-200'
+          : 'bg-white border border-gray-200 shadow-sm hover:shadow-md'
       }`}
     >
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold text-gray-900">{tank.name}</h3>
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <h3 className={`text-lg font-semibold shrink-0 ${isActive || hasAnomaly ? 'text-white' : 'text-gray-900'}`}>{tank.name}</h3>
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {/* 이상감지 경고 */}
           {hasAnomaly && (
-            <span className="px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 bg-red-100 text-red-700">
+            <span className="px-2 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 bg-white/20 text-white whitespace-nowrap">
               <AlertCircle className="w-3 h-3" />
               이상감지
             </span>
           )}
           {/* ML 예상 품질 등급 */}
           {isActive && mlPrediction && !hasAnomaly && (
-            <span
-              className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
-                gradeColors[mlPrediction.predictedGrade]?.bg || 'bg-gray-100'
-              } ${gradeColors[mlPrediction.predictedGrade]?.text || 'text-gray-600'}`}
-            >
+            <span className="px-2 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 bg-white/20 text-white whitespace-nowrap">
               <Star className="w-3 h-3" />
-              {mlPrediction.predictedGrade}등급 예상
+              {mlPrediction.predictedGrade}등급
             </span>
           )}
           <span
-            className={`px-2 py-1 rounded-full text-xs font-medium ${
-              isActive
-                ? 'bg-green-100 text-green-700'
+            className={`px-2 py-1 rounded-full text-[11px] font-medium whitespace-nowrap ${
+              isActive || hasAnomaly
+                ? 'bg-white/20 text-white'
                 : 'bg-gray-100 text-gray-500'
             }`}
           >
@@ -191,12 +187,12 @@ export function TankCard({ tank, onClick }: TankCardProps) {
         <>
           {/* 이상감지 알림 (있는 경우) */}
           {hasAnomaly && anomalyAlerts.length > 0 && (
-            <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200">
+            <div className="mb-3 p-3 rounded-lg bg-white/10 backdrop-blur">
               <div className="flex items-center gap-2 mb-2">
-                <AlertCircle className="w-4 h-4 text-red-500" />
-                <span className="text-sm font-medium text-red-700">주의 필요</span>
+                <AlertCircle className="w-4 h-4 text-white" />
+                <span className="text-sm font-medium text-white">주의 필요</span>
               </div>
-              <ul className="text-xs text-red-600 space-y-1">
+              <ul className="text-xs text-white/90 space-y-1">
                 {anomalyAlerts.slice(0, 2).map((alert, idx) => (
                   <li key={idx} className="flex items-start gap-1">
                     <span className="mt-0.5">•</span>
@@ -205,7 +201,7 @@ export function TankCard({ tank, onClick }: TankCardProps) {
                 ))}
               </ul>
               {anomalyData?.similar_batches && anomalyData.similar_batches.length > 0 && (
-                <p className="text-xs text-red-500 mt-2">
+                <p className="text-xs text-white/80 mt-2">
                   유사 배치 {anomalyData.similar_batches.length}건 기준 비교
                 </p>
               )}
@@ -213,15 +209,15 @@ export function TankCard({ tank, onClick }: TankCardProps) {
           )}
 
           {/* 배추 정보 */}
-          <div className="mb-3 pb-3 border-b border-gray-100">
-            <p className="text-sm text-gray-600">
-              <span className="font-medium text-gray-800">{batch.cultivar}</span> 배추
+          <div className={`mb-3 pb-3 border-b ${hasAnomaly ? 'border-white/20' : 'border-white/30'}`}>
+            <p className="text-sm text-white/90">
+              <span className="font-medium text-white">{batch.cultivar}</span> 배추
               <span className="mx-2">·</span>
               <span>{batch.avg_weight}kg</span>
               <span className="mx-2">·</span>
-              <span className="text-blue-600">{batch.initial_salinity}%</span>
+              <span className="text-white">{batch.initial_salinity}%</span>
             </p>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-white/60 mt-1">
               배치: {batch.batch_code}
             </p>
           </div>
@@ -230,27 +226,25 @@ export function TankCard({ tank, onClick }: TankCardProps) {
           {mlPrediction && !hasAnomaly && (
             <div className={`mb-3 p-3 rounded-lg ${
               mlPrediction.remainingHours <= 2
-                ? 'bg-amber-50 border border-amber-200'
-                : 'bg-blue-50 border border-blue-200'
+                ? 'bg-amber-400/30'
+                : 'bg-white/10'
             }`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {mlPrediction.remainingHours <= 2 ? (
-                    <AlertTriangle className="w-4 h-4 text-amber-500" />
+                    <AlertTriangle className="w-4 h-4 text-amber-200" />
                   ) : (
-                    <TrendingUp className="w-4 h-4 text-blue-500" />
+                    <TrendingUp className="w-4 h-4 text-white/80" />
                   )}
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-sm font-medium text-white">
                     {mlPrediction.remainingHours <= 2 ? '완료 임박' : 'ML 예측'}
                   </span>
                 </div>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-white/70">
                   신뢰도 {Math.round(mlPrediction.confidence * 100)}%
                 </span>
               </div>
-              <p className={`text-lg font-bold mt-1 ${
-                mlPrediction.remainingHours <= 2 ? 'text-amber-600' : 'text-blue-600'
-              }`}>
+              <p className="text-lg font-bold mt-1 text-white">
                 {formatRemainingTime(mlPrediction.remainingHours)} 남음
               </p>
             </div>
@@ -259,64 +253,62 @@ export function TankCard({ tank, onClick }: TankCardProps) {
           {/* 상태 정보 그리드 */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-gray-400" />
+              <Clock className="w-4 h-4 text-white/70" />
               <div>
-                <p className="text-xs text-gray-500">경과 시간</p>
-                <p className="text-sm font-medium">{getElapsedTime()}</p>
+                <p className="text-xs text-white/60">경과 시간</p>
+                <p className="text-sm font-medium text-white">{getElapsedTime()}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Droplets className="w-4 h-4 text-cyan-500" />
+              <Thermometer className="w-4 h-4 text-white/70" />
               <div>
-                <p className="text-xs text-gray-500">현재 염도</p>
-                <p className="text-sm font-medium">
-                  {batch.latest_measurement?.salinity_avg?.toFixed(1) || batch.initial_salinity}%
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Thermometer className="w-4 h-4 text-orange-500" />
-              <div>
-                <p className="text-xs text-gray-500">수온</p>
-                <p className="text-sm font-medium">
+                <p className="text-xs text-white/60">수온</p>
+                <p className="text-sm font-medium text-white">
                   {batch.latest_measurement?.water_temp?.toFixed(1) || '-'}°C
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-green-500" />
+              <Droplets className="w-4 h-4 text-white/70" />
               <div>
-                <p className="text-xs text-gray-500">실내온도</p>
-                <p className="text-sm font-medium">
-                  {batch.room_temp || '-'}°C
+                <p className="text-xs text-white/60">상단 염도</p>
+                <p className="text-sm font-medium text-white">
+                  {batch.latest_measurement?.top_salinity?.toFixed(1) || '-'}%
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Droplets className="w-4 h-4 text-white/70" />
+              <div>
+                <p className="text-xs text-white/60">하단 염도</p>
+                <p className="text-sm font-medium text-white">
+                  {batch.latest_measurement?.bottom_salinity?.toFixed(1) || '-'}%
                 </p>
               </div>
             </div>
           </div>
 
           {/* 진행률 바 */}
-          <div className="mt-4 pt-3 border-t border-gray-100">
-            <div className="flex justify-between text-xs text-gray-500 mb-1">
+          <div className="mt-4 pt-3 border-t border-white/20">
+            <div className="flex justify-between text-xs text-white/70 mb-1">
               <span>진행률</span>
-              <span className="font-medium">
+              <span className="font-medium text-white">
                 {Math.round(mlPrediction?.progress || batch.progress || 0)}%
               </span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div className="w-full bg-white/20 rounded-full h-2.5">
               <div
-                className={`h-2.5 rounded-full transition-all duration-500 ${
-                  hasAnomaly ? 'bg-red-500' : getProgressColor(mlPrediction?.progress || batch.progress || 0)
-                }`}
+                className="h-2.5 rounded-full transition-all duration-500 bg-white"
                 style={{
                   width: `${Math.min(100, mlPrediction?.progress || batch.progress || 0)}%`,
                 }}
               />
             </div>
             {(mlPrediction?.progress || batch.progress || 0) >= 90 && !hasAnomaly && (
-              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+              <p className="text-xs text-amber-200 mt-1 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
                 세척 준비를 시작하세요
               </p>

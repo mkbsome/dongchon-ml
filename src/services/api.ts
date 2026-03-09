@@ -28,12 +28,12 @@ const api = axios.create({
 // 탱크 관련 API
 export const tanksApi = {
   getAll: async (): Promise<Tank[]> => {
-    const { data } = await api.get('/tanks');
+    const { data } = await api.get('/tanks/');
     return data;
   },
 
   getActive: async (tankId: number): Promise<Batch | null> => {
-    const { data } = await api.get(`/tanks/${tankId}/active`);
+    const { data } = await api.get(`/tanks/${tankId}/active/`);
     return data;
   },
 };
@@ -41,12 +41,12 @@ export const tanksApi = {
 // 배치 관련 API
 export const batchesApi = {
   getAll: async (params?: { status?: string; limit?: number }): Promise<Batch[]> => {
-    const { data } = await api.get('/batches', { params });
+    const { data } = await api.get('/batches/', { params });
     return data;
   },
 
   getById: async (id: string): Promise<Batch> => {
-    const { data } = await api.get(`/batches/${id}`);
+    const { data } = await api.get(`/batches/${id}/`);
     return data;
   },
 

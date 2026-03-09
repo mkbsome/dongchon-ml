@@ -1,8 +1,8 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 
 :root {
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -32,18 +32,17 @@ body {
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -57,13 +56,38 @@ body {
   }
 
   .card-hover {
-    @apply card transition-all duration-200 hover:shadow-md hover:border-green-200;
+    @apply card transition-all duration-200 hover:shadow-md hover:border-blue-200;
   }
 
+  /* Active Tank Card - Blue/Green Gradient */
+  .tank-card-active {
+    @apply rounded-xl p-5 text-white shadow-lg;
+    background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
+  }
+
+  .tank-card-idle {
+    @apply bg-white rounded-xl border border-gray-200 p-5 shadow-sm;
+  }
+
+  /* Stat Cards */
+  .stat-card {
+    @apply bg-white rounded-xl border border-gray-100 p-5 shadow-sm;
+  }
+
+  .stat-card-primary {
+    @apply rounded-xl p-5 text-white shadow-lg;
+    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  }
+
+  .stat-card-success {
+    @apply rounded-xl p-5 shadow-lg bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-100;
+  }
+
+  /* Buttons */
   .btn-primary {
-    @apply px-4 py-2 bg-green-600 text-white rounded-lg font-medium
-           hover:bg-green-700 transition-colors duration-200
-           focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2;
+    @apply px-4 py-2 bg-blue-600 text-white rounded-lg font-medium
+           hover:bg-blue-700 transition-colors duration-200
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
   }
 
   .btn-secondary {
@@ -72,13 +96,143 @@ body {
            focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
   }
 
+  .btn-success {
+    @apply px-4 py-2 bg-green-600 text-white rounded-lg font-medium
+           hover:bg-green-700 transition-colors duration-200
+           focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2;
+  }
+
+  .btn-outline {
+    @apply px-4 py-2 bg-white text-gray-700 rounded-lg font-medium border border-gray-300
+           hover:bg-gray-50 hover:border-gray-400 transition-colors duration-200
+           focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
+  }
+
+  /* Input */
   .input {
     @apply w-full px-3 py-2 border border-gray-300 rounded-lg
-           focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
            transition-all duration-200;
+  }
+
+  .select {
+    @apply input appearance-none cursor-pointer
+           bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236b7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')]
+           bg-[length:20px_20px] bg-[right_8px_center] bg-no-repeat pr-10;
   }
 
   .label {
     @apply block text-sm font-medium text-gray-700 mb-1;
   }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-green-100 text-green-700;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-100 text-amber-700;
+  }
+
+  .badge-error {
+    @apply badge bg-red-100 text-red-700;
+  }
+
+  .badge-info {
+    @apply badge bg-blue-100 text-blue-700;
+  }
+
+  .badge-gray {
+    @apply badge bg-gray-100 text-gray-600;
+  }
+
+  /* Progress Bar */
+  .progress-bar {
+    @apply h-2 rounded-full bg-gray-200 overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
+
+  /* Insight Panel */
+  .insight-card {
+    @apply bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden;
+  }
+
+  .insight-header {
+    @apply flex items-center gap-2 p-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50;
+  }
+
+  .insight-item {
+    @apply flex items-start gap-3 p-3 rounded-lg;
+  }
+
+  .insight-item-success {
+    @apply insight-item bg-green-50 border border-green-100;
+  }
+
+  .insight-item-warning {
+    @apply insight-item bg-amber-50 border border-amber-100;
+  }
+
+  /* Table */
+  .table-header {
+    @apply px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-gray-700 border-b border-gray-100;
+  }
+
+  .table-row-hover {
+    @apply hover:bg-gray-50 transition-colors;
+  }
+
+  /* Alert */
+  .alert {
+    @apply p-4 rounded-lg flex items-start gap-3;
+  }
+
+  .alert-info {
+    @apply alert bg-blue-50 border border-blue-100 text-blue-700;
+  }
+
+  .alert-success {
+    @apply alert bg-green-50 border border-green-100 text-green-700;
+  }
+
+  .alert-warning {
+    @apply alert bg-amber-50 border border-amber-100 text-amber-700;
+  }
+
+  .alert-error {
+    @apply alert bg-red-50 border border-red-100 text-red-700;
+  }
+}
+
+/* Animation */
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* Gradient Text */
+.text-gradient {
+  background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
