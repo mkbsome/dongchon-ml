@@ -1,21 +1,21 @@
 {
   "optimizer": {
-    "salinity_mae": 0.6054858541488649,
-    "salinity_r2": 0.7262044778582342,
-    "duration_mae": 1.3236369013786313,
-    "duration_r2": 0.9137362279240056,
-    "train_samples": 159,
-    "test_samples": 40
+    "salinity_mae": 0.29068139032884077,
+    "salinity_r2": 0.8744002252607522,
+    "duration_mae": 1.3841717142047303,
+    "duration_r2": 0.9555714015910938,
+    "train_samples": 348,
+    "test_samples": 88
   },
   "time_predictor": {
-    "mae": 1.5563702497679441,
-    "r2": 0.8560791923951728,
-    "train_samples": 1545,
-    "test_samples": 387
+    "mae": 1.0918178751897276,
+    "r2": 0.9694850149146227,
+    "train_samples": 2846,
+    "test_samples": 712
   },
   "quality_classifier": {
-    "accuracy": 0.8723404255319149,
-    "train_samples": 186,
-    "test_samples": 47
+    "accuracy": 0.7456140350877193,
+    "train_samples": 454,
+    "test_samples": 114
   }
 }

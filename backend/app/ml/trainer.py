@@ -59,30 +59,39 @@ class ModelTrainer:
         if 'cultivar' not in self.label_encoders:
             self.label_encoders['cultivar'] = LabelEncoder()
             self.label_encoders['season'] = LabelEncoder()
+            self.label_encoders['pickling_type'] = LabelEncoder()
 
             # 모든 품종과 계절 학습
-            all_cultivars = list(set(b['cultivar'] for b in batches))
+            all_cultivars = list(set(b.get('cultivar', b.get('cultivar_label', '기타')) for b in batches))
             all_seasons = list(set(b['season'] for b in batches))
+            all_pickling_types = list(set(b.get('pickling_type', '하루절임') for b in batches))
             self.label_encoders['cultivar'].fit(all_cultivars)
             self.label_encoders['season'].fit(all_seasons)
+            self.label_encoders['pickling_type'].fit(all_pickling_types)
 
         for b in batches:
-            if b['quality_grade'] == 'A':  # A등급 데이터만 사용 (최적 조건)
+            # '좋음' 등급 데이터만 사용 (최적 조건)
+            if b['quality_grade'] == '좋음':
+                cultivar = b.get('cultivar', b.get('cultivar_label', '기타'))
                 features = [
-                    self.label_encoders['cultivar'].transform([b['cultivar']])[0],
+                    self.label_encoders['cultivar'].transform([cultivar])[0],
                     b['avg_weight'],
                     b['firmness'],
                     b['leaf_thickness'],
                     self.label_encoders['season'].transform([b['season']])[0],
                     b['room_temp'],
+                    b.get('initial_water_temp', b.get('water_temp', 15)),
+                    self.label_encoders['pickling_type'].transform([b.get('pickling_type', '하루절임')])[0],
                 ]
                 X.append(features)
                 y_salinity.append(b['initial_salinity'])
 
-                # 절임 시간 계산
-                start = datetime.fromisoformat(b['start_time'])
-                end = datetime.fromisoformat(b['end_time'])
-                duration = (end - start).total_seconds() / 3600
+                # 절임 시간 (분 -> 시간)
+                duration = b.get('total_duration_minutes', 0) / 60
+                if duration == 0:
+                    start = datetime.fromisoformat(b['start_time'])
+                    end = datetime.fromisoformat(b['end_time'])
+                    duration = (end - start).total_seconds() / 3600
                 y_duration.append(duration)
 
         return np.array(X), np.array(y_salinity), np.array(y_duration)
@@ -101,35 +110,40 @@ class ModelTrainer:
                 batch_measurements[bid] = []
             batch_measurements[bid].append(m)
 
+        # 배치 ID로 빠른 검색
+        batch_dict = {b['id']: b for b in batches}
+
         X = []
         y = []
 
-        for b in batches:
-            bid = b['id']
-            if bid not in batch_measurements:
+        for bid, meas_list in batch_measurements.items():
+            if bid not in batch_dict:
                 continue
 
-            meas_list = sorted(batch_measurements[bid], key=lambda x: x['timestamp'])
+            b = batch_dict[bid]
+            meas_list = sorted(meas_list, key=lambda x: x['timestamp'])
 
-            start = datetime.fromisoformat(b['start_time'])
-            end = datetime.fromisoformat(b['end_time'])
-            total_duration = (end - start).total_seconds() / 3600
+            # 총 절임 시간 (분 -> 시간)
+            total_duration = b.get('total_duration_minutes', 0) / 60
+            if total_duration == 0:
+                start = datetime.fromisoformat(b['start_time'])
+                end = datetime.fromisoformat(b['end_time'])
+                total_duration = (end - start).total_seconds() / 3600
 
             # 각 측정 시점에서의 특성과 남은 시간
             for m in meas_list[:-1]:  # 마지막 측정 제외
-                meas_time = datetime.fromisoformat(m['timestamp'])
-                elapsed = (meas_time - start).total_seconds() / 3600
+                elapsed = m.get('elapsed_minutes', 0) / 60
                 remaining = total_duration - elapsed
 
                 if remaining > 0:
                     features = [
                         elapsed,
-                        m['salinity_avg'],
+                        m.get('salinity_avg', (m.get('salinity_top', 0) + m.get('salinity_bottom', 0)) / 2),
                         b['initial_salinity'],
-                        m['water_temp'],
-                        m['accumulated_temp'],
-                        m['salinity_diff'],
-                        m['osmotic_pressure_index'],
+                        m.get('water_temp', 15),
+                        elapsed * m.get('water_temp', 15),  # 적산온도 근사
+                        m.get('salinity_diff', abs(m.get('salinity_top', 0) - m.get('salinity_bottom', 0))),
+                        m.get('salinity_avg', 10) * 0.1,  # 삼투압 근사
                     ]
                     X.append(features)
                     y.append(remaining)
@@ -140,7 +154,7 @@ class ModelTrainer:
         """
         품질 분류 모델용 데이터 준비
         입력: 최종 상태
-        출력: 품질 등급 (A/B/C)
+        출력: 품질 등급 (좋음/양호/나쁨)
         """
         X = []
         y = []
@@ -148,21 +162,27 @@ class ModelTrainer:
         # 품질 등급 인코더
         if 'quality' not in self.label_encoders:
             self.label_encoders['quality'] = LabelEncoder()
-            self.label_encoders['quality'].fit(['A', 'B', 'C'])
+            self.label_encoders['quality'].fit(['좋음', '양호', '나쁨'])
 
         for b in batches:
-            start = datetime.fromisoformat(b['start_time'])
-            end = datetime.fromisoformat(b['end_time'])
-            duration = (end - start).total_seconds() / 3600
+            # 절임 시간 (분 -> 시간)
+            duration = b.get('total_duration_minutes', 0) / 60
+            if duration == 0:
+                start = datetime.fromisoformat(b['start_time'])
+                end = datetime.fromisoformat(b['end_time'])
+                duration = (end - start).total_seconds() / 3600
+
+            cultivar = b.get('cultivar', b.get('cultivar_label', '기타'))
 
             features = [
-                b['final_cabbage_salinity'],
-                b['bend_test'],
+                b.get('final_salinity', b.get('final_cabbage_salinity', 1.7)),
+                b.get('quality_bending', b.get('bend_test', 3)),
                 duration,
-                self.label_encoders['cultivar'].transform([b['cultivar']])[0],
+                self.label_encoders['cultivar'].transform([cultivar])[0],
                 self.label_encoders['season'].transform([b['season']])[0],
                 b['avg_weight'],
                 b['initial_salinity'],
+                b.get('initial_water_temp', 15),
             ]
             X.append(features)
             y.append(self.label_encoders['quality'].transform([b['quality_grade']])[0])
@@ -391,11 +411,15 @@ class ModelTrainer:
 if __name__ == "__main__":
     trainer = ModelTrainer()
 
-    # 더미 데이터 경로
-    data_path = Path(__file__).parent.parent.parent / "scripts" / "dummy_data_2024.json"
+    # 새 현실적 데이터 경로
+    data_path = Path(__file__).parent.parent.parent / "scripts" / "realistic_data_2024_2025.json"
+
+    # 기존 경로 대체
+    if not data_path.exists():
+        data_path = Path(__file__).parent.parent.parent / "scripts" / "dummy_data_2024.json"
 
     if data_path.exists():
         trainer.train_all(str(data_path), version="v1")
     else:
         print(f"[오류] 데이터 파일 없음: {data_path}")
-        print("먼저 generate_dummy_data.py를 실행하세요.")
+        print("먼저 generate_realistic_data.py를 실행하세요.")
