@@ -1,0 +1,21 @@
+{
+  "optimizer": {
+    "salinity_mae": 0.6054858541488649,
+    "salinity_r2": 0.7262044778582342,
+    "duration_mae": 1.3236369013786313,
+    "duration_r2": 0.9137362279240056,
+    "train_samples": 159,
+    "test_samples": 40
+  },
+  "time_predictor": {
+    "mae": 1.5563702497679441,
+    "r2": 0.8560791923951728,
+    "train_samples": 1545,
+    "test_samples": 387
+  },
+  "quality_classifier": {
+    "accuracy": 0.8723404255319149,
+    "train_samples": 186,
+    "test_samples": 47
+  }
+}

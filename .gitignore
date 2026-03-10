@@ -26,3 +26,22 @@ dist-ssr
 # Desktop.ini
 desktop.ini
 **/desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.env
+
+# Backend
+backend/*.db
+backend/dongchon.db
+
+# IDE
+.idea/
+*.swp
+*.swo
