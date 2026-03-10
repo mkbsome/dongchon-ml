@@ -203,10 +203,11 @@ class ProcessOptimizer:
             self.is_trained = False
 
     def _prepare_optimizer_features(self, cultivar: str, avg_weight: float, firmness: float,
-                                      leaf_thickness: float, season: str, room_temp: float) -> np.ndarray:
+                                      leaf_thickness: float, season: str, room_temp: float,
+                                      water_temp: float = None, pickling_type: str = None) -> np.ndarray:
         """
         공정 최적화 모델 입력 피처 준비 (trainer.py와 동일한 구조)
-        6개 feature: [cultivar_encoded, avg_weight, firmness, leaf_thickness, season_encoded, room_temp]
+        8개 feature: [cultivar_encoded, avg_weight, firmness, leaf_thickness, season_encoded, room_temp, water_temp, pickling_type_encoded]
         """
         # 품종 인코딩
         cultivar_encoded = 0
@@ -214,7 +215,6 @@ class ProcessOptimizer:
             try:
                 cultivar_encoded = self.label_encoders['cultivar'].transform([cultivar])[0]
             except ValueError:
-                # 알 수 없는 품종은 0으로
                 cultivar_encoded = 0
 
         # 계절 인코딩
@@ -225,11 +225,30 @@ class ProcessOptimizer:
             except ValueError:
                 season_encoded = 0
 
-        # UI firmness(0~100) → ML firmness (그대로 사용, 학습 데이터와 동일)
-        # trainer.py에서는 firmness를 그대로 사용했으므로 변환 없음
-        firmness_val = firmness if firmness else 50.0
-        leaf_thickness_val = leaf_thickness if leaf_thickness else 2.0
-        room_temp_val = room_temp if room_temp else 20.0
+        # 절임 방식 인코딩 (계절과 수온에 따라 자동 결정)
+        pickling_type_encoded = 0
+        if pickling_type is None:
+            # 겨울 + 저온이면 이틀절임 가능성 높음
+            if season == '겨울' and (water_temp is None or water_temp < 12):
+                pickling_type = '이틀절임'
+            else:
+                pickling_type = '하루절임'
+
+        if 'pickling_type' in self.label_encoders:
+            try:
+                pickling_type_encoded = self.label_encoders['pickling_type'].transform([pickling_type])[0]
+            except ValueError:
+                pickling_type_encoded = 0
+
+        # 기본값 설정
+        firmness_val = firmness if firmness else 15.0  # 학습 데이터 기준 (10-20 범위)
+        leaf_thickness_val = leaf_thickness if leaf_thickness else 3  # mm 단위
+        room_temp_val = room_temp if room_temp else 18.0
+
+        # 수온 기본값 (계절별)
+        if water_temp is None:
+            water_temp_defaults = {'봄': 14, '여름': 22, '가을': 16, '겨울': 10}
+            water_temp = water_temp_defaults.get(season, 15)
 
         features = np.array([[
             cultivar_encoded,
@@ -237,7 +256,9 @@ class ProcessOptimizer:
             firmness_val,
             leaf_thickness_val,
             season_encoded,
-            room_temp_val
+            room_temp_val,
+            water_temp,
+            pickling_type_encoded
         ]])
 
         return features
@@ -271,9 +292,10 @@ class ProcessOptimizer:
                     initial_salinity=None, outdoor_temp=None, water_temp=None) -> OptimizationResult:
         """ML 모델 기반 예측 (trainer.py에서 학습된 모델 사용)"""
         try:
-            # 피처 준비 (6개 feature)
+            # 피처 준비 (8개 feature)
             features = self._prepare_optimizer_features(
-                cultivar, avg_weight, firmness, leaf_thickness, season, room_temp
+                cultivar, avg_weight, firmness, leaf_thickness, season, room_temp,
+                water_temp=water_temp
             )
 
             # 스케일링 적용
@@ -296,9 +318,15 @@ class ProcessOptimizer:
             # 최적 범위 판단
             is_optimal = 1.6 <= expected_final <= 2.0
 
-            # 품질 예측 (quality_classifier 사용 - 7개 feature 필요)
-            # final_cabbage_salinity, bend_test, duration, cultivar, season, avg_weight, initial_salinity
+            # 품질 예측 (quality_classifier 사용 - 8개 feature 필요)
+            # final_salinity, quality_bending, duration, cultivar, season, avg_weight, initial_salinity, water_temp
             quality_grade = "A"  # 기본값
+
+            # 수온 기본값 (계절별)
+            if water_temp is None:
+                water_temp_defaults = {'봄': 14, '여름': 22, '가을': 16, '겨울': 10}
+                water_temp = water_temp_defaults.get(season, 15)
+
             if self.model_quality and 'quality_classifier' in self.scalers:
                 try:
                     # 품질 분류기 피처
@@ -316,20 +344,22 @@ class ProcessOptimizer:
                             pass
 
                     quality_features = np.array([[
-                        expected_final,      # final_cabbage_salinity
-                        4.5,                 # bend_test (예상값)
+                        expected_final,      # final_salinity
+                        4,                   # quality_bending (예상값, 1-5 스케일)
                         duration,            # duration
                         cultivar_enc,        # cultivar
                         season_enc,          # season
                         avg_weight,          # avg_weight
-                        recommended_salinity # initial_salinity
+                        recommended_salinity, # initial_salinity
+                        water_temp           # initial_water_temp
                     ]])
                     quality_scaled = self.scalers['quality_classifier'].transform(quality_features)
                     quality_pred = self.model_quality.predict(quality_scaled)[0]
 
-                    # 라벨 디코딩
+                    # 라벨 디코딩 (좋음/양호/나쁨 → A/B/C)
                     if 'quality' in self.label_encoders:
-                        quality_grade = self.label_encoders['quality'].inverse_transform([quality_pred])[0]
+                        quality_label = self.label_encoders['quality'].inverse_transform([quality_pred])[0]
+                        quality_grade = {'좋음': 'A', '양호': 'B', '나쁨': 'C'}.get(quality_label, 'B')
                     else:
                         quality_grade = GRADE_MAP.get(int(quality_pred), 'B')
                 except Exception as qe:
