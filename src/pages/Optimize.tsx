@@ -143,18 +143,18 @@ export function Optimize() {
             elapsed_hours: Math.round(elapsed * 10) / 10,
             current_salinity: 5.5,
             initial_salinity: Number(selectedBatch.initial_salinity) || 12,
+            water_temp: 15,
             cultivar: selectedBatch.cultivar || '해남',
-            avg_weight: Number(selectedBatch.avg_weight) || 3,
             season: selectedBatch.season || '겨울',
           },
           scenarios: [
-            { hours_from_now: 0, predicted_grade: 'B', grade_probabilities: { A: 0.3, B: 0.5, C: 0.2 }, estimated_salinity: 5.5, confidence: 0.7, recommendation: '위험' },
-            { hours_from_now: 2, predicted_grade: 'A', grade_probabilities: { A: 0.6, B: 0.3, C: 0.1 }, estimated_salinity: 3.8, confidence: 0.8, recommendation: '적정' },
-            { hours_from_now: 4, predicted_grade: 'A', grade_probabilities: { A: 0.85, B: 0.12, C: 0.03 }, estimated_salinity: 2.2, confidence: 0.9, recommendation: '권장' },
-            { hours_from_now: 6, predicted_grade: 'A', grade_probabilities: { A: 0.75, B: 0.2, C: 0.05 }, estimated_salinity: 1.5, confidence: 0.85, recommendation: '적정' },
+            { hours_from_now: 0, predicted_grade: 'B', grade_probabilities: { A: 0.3, B: 0.5, C: 0.2 }, predicted_salinity: 5.5, confidence: 0.7, is_recommended: false },
+            { hours_from_now: 2, predicted_grade: 'A', grade_probabilities: { A: 0.6, B: 0.3, C: 0.1 }, predicted_salinity: 3.8, confidence: 0.8, is_recommended: false },
+            { hours_from_now: 4, predicted_grade: 'A', grade_probabilities: { A: 0.85, B: 0.12, C: 0.03 }, predicted_salinity: 2.2, confidence: 0.9, is_recommended: true },
+            { hours_from_now: 6, predicted_grade: 'A', grade_probabilities: { A: 0.75, B: 0.2, C: 0.05 }, predicted_salinity: 1.5, confidence: 0.85, is_recommended: false },
           ],
-          best_scenario: { hours_from_now: 4, predicted_grade: 'A', grade_probabilities: { A: 0.85, B: 0.12, C: 0.03 }, estimated_salinity: 2.2, confidence: 0.9, recommendation: '권장' },
           recommendation: '4시간 후 완료 시 A등급 확률 85%',
+          optimal_scenario_index: 2,
           generated_at: new Date().toISOString(),
         });
       }
@@ -169,10 +169,19 @@ export function Optimize() {
     return 'bg-red-100 text-red-700';
   };
 
-  const getRecommendationColor = (rec: string) => {
-    if (rec === '권장') return 'bg-emerald-500';
-    if (rec === '적정') return 'bg-amber-500';
-    return 'bg-red-500';
+  const getRecommendationBadge = (scenario: CompletionScenario) => {
+    if (scenario.is_recommended) {
+      return { color: 'bg-emerald-500', text: '권장' };
+    }
+    const aProb = scenario.grade_probabilities['A'] || 0;
+    if (aProb >= 0.7) return { color: 'bg-emerald-500', text: '적정' };
+    if (aProb >= 0.4) return { color: 'bg-amber-500', text: '보통' };
+    return { color: 'bg-red-500', text: '위험' };
+  };
+
+  // 최적 시나리오 찾기
+  const getBestScenario = (result: CompletionDecisionResponse) => {
+    return result.scenarios[result.optimal_scenario_index] || result.scenarios[0];
   };
 
   return (
@@ -509,37 +518,42 @@ export function Optimize() {
                       <p className="text-xl font-bold text-slate-800">{completionResult.current_status.cultivar}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">무게</p>
-                      <p className="text-xl font-bold text-slate-800">{completionResult.current_status.avg_weight}kg</p>
+                      <p className="text-xs text-slate-500">수온</p>
+                      <p className="text-xl font-bold text-slate-800">{completionResult.current_status.water_temp}°C</p>
                     </div>
                   </div>
                 </div>
 
                 {/* 최적 시나리오 */}
-                <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-5 h-5 text-emerald-600" />
-                    <h4 className="font-semibold text-emerald-800">최적 완료 시점</h4>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-3xl font-bold text-emerald-700">
-                        {completionResult.best_scenario.hours_from_now === 0
-                          ? '지금'
-                          : `${completionResult.best_scenario.hours_from_now}시간 후`}
-                      </p>
-                      <p className="text-sm text-emerald-600 mt-1">{completionResult.recommendation}</p>
+                {(() => {
+                  const bestScenario = getBestScenario(completionResult);
+                  return (
+                    <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle className="w-5 h-5 text-emerald-600" />
+                        <h4 className="font-semibold text-emerald-800">최적 완료 시점</h4>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-3xl font-bold text-emerald-700">
+                            {bestScenario.hours_from_now === 0
+                              ? '지금'
+                              : `${bestScenario.hours_from_now}시간 후`}
+                          </p>
+                          <p className="text-sm text-emerald-600 mt-1">{completionResult.recommendation}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`inline-block px-3 py-1 text-xl font-bold rounded ${getGradeColor(bestScenario.predicted_grade)}`}>
+                            {bestScenario.predicted_grade}등급
+                          </span>
+                          <p className="text-sm text-emerald-600 mt-1">
+                            확률 {Math.round((bestScenario.grade_probabilities['A'] || 0) * 100)}%
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className={`inline-block px-3 py-1 text-xl font-bold rounded ${getGradeColor(completionResult.best_scenario.predicted_grade)}`}>
-                        {completionResult.best_scenario.predicted_grade}등급
-                      </span>
-                      <p className="text-sm text-emerald-600 mt-1">
-                        확률 {Math.round((completionResult.best_scenario.grade_probabilities['A'] || 0) * 100)}%
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* 시나리오 타임라인 */}
                 <div className="bg-white rounded-lg border border-slate-200 p-5">
@@ -549,46 +563,49 @@ export function Optimize() {
                   </div>
 
                   <div className="space-y-2">
-                    {completionResult.scenarios.map((scenario: CompletionScenario, idx: number) => (
-                      <div
-                        key={idx}
-                        className={`flex items-center gap-4 p-3 rounded-lg border ${
-                          scenario.hours_from_now === completionResult.best_scenario.hours_from_now
-                            ? 'border-emerald-300 bg-emerald-50'
-                            : 'border-slate-100'
-                        }`}
-                      >
-                        <div className="w-16 text-center">
-                          <p className="font-semibold text-slate-800">
-                            {scenario.hours_from_now === 0 ? '지금' : `+${scenario.hours_from_now}h`}
-                          </p>
+                    {completionResult.scenarios.map((scenario: CompletionScenario, idx: number) => {
+                      const badge = getRecommendationBadge(scenario);
+                      return (
+                        <div
+                          key={idx}
+                          className={`flex items-center gap-4 p-3 rounded-lg border ${
+                            scenario.is_recommended
+                              ? 'border-emerald-300 bg-emerald-50'
+                              : 'border-slate-100'
+                          }`}
+                        >
+                          <div className="w-16 text-center">
+                            <p className="font-semibold text-slate-800">
+                              {scenario.hours_from_now === 0 ? '지금' : `+${scenario.hours_from_now}h`}
+                            </p>
+                          </div>
+
+                          <span className={`px-2 py-1 text-sm font-bold rounded ${getGradeColor(scenario.predicted_grade)}`}>
+                            {scenario.predicted_grade}
+                          </span>
+
+                          <div className="flex-1 flex gap-0.5 h-5">
+                            {Object.entries(scenario.grade_probabilities).map(([grade, prob]) => (
+                              <div
+                                key={grade}
+                                className={`rounded ${grade === 'A' ? 'bg-emerald-400' : grade === 'B' ? 'bg-amber-400' : 'bg-red-400'} flex items-center justify-center text-xs text-white font-medium`}
+                                style={{ width: `${prob * 100}%` }}
+                              >
+                                {prob >= 0.2 && `${Math.round(prob * 100)}%`}
+                              </div>
+                            ))}
+                          </div>
+
+                          <span className={`px-2 py-1 text-xs text-white font-medium rounded ${badge.color}`}>
+                            {badge.text}
+                          </span>
+
+                          <span className="w-14 text-right text-sm text-slate-500">
+                            {scenario.predicted_salinity}%
+                          </span>
                         </div>
-
-                        <span className={`px-2 py-1 text-sm font-bold rounded ${getGradeColor(scenario.predicted_grade)}`}>
-                          {scenario.predicted_grade}
-                        </span>
-
-                        <div className="flex-1 flex gap-0.5 h-5">
-                          {Object.entries(scenario.grade_probabilities).map(([grade, prob]) => (
-                            <div
-                              key={grade}
-                              className={`rounded ${grade === 'A' ? 'bg-emerald-400' : grade === 'B' ? 'bg-amber-400' : 'bg-red-400'} flex items-center justify-center text-xs text-white font-medium`}
-                              style={{ width: `${prob * 100}%` }}
-                            >
-                              {prob >= 0.2 && `${Math.round(prob * 100)}%`}
-                            </div>
-                          ))}
-                        </div>
-
-                        <span className={`px-2 py-1 text-xs text-white font-medium rounded ${getRecommendationColor(scenario.recommendation)}`}>
-                          {scenario.recommendation}
-                        </span>
-
-                        <span className="w-14 text-right text-sm text-slate-500">
-                          {scenario.estimated_salinity}%
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </>

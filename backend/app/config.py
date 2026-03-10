@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # CORS
-    cors_origins: str = "http://localhost:3000,http://localhost:1420"
+    cors_origins: str = "http://localhost:3000,http://localhost:1420,http://localhost:5173"
 
     # Claude API
     claude_api_key: str = ""

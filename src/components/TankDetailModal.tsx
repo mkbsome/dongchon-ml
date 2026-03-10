@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Send, Loader2, TrendingDown, Thermometer, Droplets, Bot, LineChart } from 'lucide-react';
+import { X, Send, Loader2, Thermometer, Droplets, Bot, LineChart } from 'lucide-react';
 import type { Tank } from '../types';
 import { batchesApi } from '../services/api';
 import { useStore } from '../stores/useStore';
@@ -33,7 +33,15 @@ export function TankDetailModal({ tank, onClose }: TankDetailModalProps) {
       try {
         const batchDetail = await batchesApi.getById(batch.id);
         if (batchDetail.measurements) {
-          setMeasurements(batchDetail.measurements);
+          // Measurement 타입을 MeasurementData로 변환
+          const mappedData: MeasurementData[] = batchDetail.measurements.map(m => ({
+            timestamp: m.timestamp,
+            top_salinity: m.top_salinity ?? 0,
+            bottom_salinity: m.bottom_salinity ?? 0,
+            water_temp: m.water_temp ?? 0,
+            salinity_avg: m.salinity_avg ?? 0
+          }));
+          setMeasurements(mappedData);
         }
       } catch (error) {
         console.error('Failed to load measurements:', error);
@@ -129,7 +137,7 @@ ${recentMeasurements.map((m, i) =>
     data: number[],
     color: string,
     label: string,
-    chartId: string
+    _chartId: string  // 미래 확장용
   ) => {
     if (data.length === 0) return null;
 

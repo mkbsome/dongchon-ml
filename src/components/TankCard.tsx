@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, Thermometer, Droplets, Activity, Star, AlertTriangle, TrendingUp, AlertCircle } from 'lucide-react';
+import { Clock, Thermometer, Droplets, Star, AlertTriangle, TrendingUp, AlertCircle } from 'lucide-react';
 import type { Tank, AnomalyCheckResponse } from '../types';
 import { mlApi } from '../services/api';
 
@@ -43,10 +43,12 @@ export function TankCard({ tank, onClick }: TankCardProps) {
         // 시간 예측 처리
         let remainingHours = 22 - elapsedHours;
         let progress = batch.progress || 0;
+        let timeConfidence = 0.7;
 
         if (timePred.status === 'fulfilled') {
           remainingHours = timePred.value.remaining_hours || remainingHours;
           progress = timePred.value.current_progress || progress;
+          timeConfidence = timePred.value.confidence || 0.85;
         }
 
         // 이상감지 처리
@@ -54,24 +56,38 @@ export function TankCard({ tank, onClick }: TankCardProps) {
           setAnomalyData(anomalyCheck.value);
         }
 
-        // 품질 예측 (현재 상태 기준)
+        // 품질 예측 (실제 ML API 호출)
         let predictedGrade = 'A';
-        let confidence = 0.85;
+        let confidence = timeConfidence;
 
         if (batch.latest_measurement?.salinity_avg) {
-          const currentSalinity = batch.latest_measurement.salinity_avg;
-          if (currentSalinity > 4) {
-            predictedGrade = 'A';
-            confidence = 0.9;
-          } else if (currentSalinity > 2.5) {
-            predictedGrade = 'A';
-            confidence = 0.85;
-          } else if (currentSalinity > 1.5) {
-            predictedGrade = 'B';
-            confidence = 0.7;
-          } else {
-            predictedGrade = 'C';
-            confidence = 0.6;
+          try {
+            const qualityPred = await mlApi.predictQuality({
+              final_salinity: batch.latest_measurement.salinity_avg,
+              bend_test: 75,  // 진행 중이므로 기본값
+              elapsed_hours: elapsedHours,
+              cultivar: batch.cultivar,
+              season: batch.season,
+              batch_id: batchIdNum
+            });
+            predictedGrade = qualityPred.predicted_grade || 'A';
+            confidence = qualityPred.confidence || 0.85;
+          } catch {
+            // 폴백: 염도 기반 간단 추정
+            const currentSalinity = batch.latest_measurement.salinity_avg;
+            if (currentSalinity > 4) {
+              predictedGrade = 'A';
+              confidence = 0.9;
+            } else if (currentSalinity > 2.5) {
+              predictedGrade = 'A';
+              confidence = 0.85;
+            } else if (currentSalinity > 1.5) {
+              predictedGrade = 'B';
+              confidence = 0.7;
+            } else {
+              predictedGrade = 'C';
+              confidence = 0.6;
+            }
           }
         }
 
@@ -117,25 +133,16 @@ export function TankCard({ tank, onClick }: TankCardProps) {
   // 남은 시간 포맷
   const formatRemainingTime = (hours: number) => {
     if (hours <= 0) return '완료 임박';
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
+    let h = Math.floor(hours);
+    let m = Math.round((hours - h) * 60);
+    // 60분이면 1시간으로 올림
+    if (m === 60) {
+      h += 1;
+      m = 0;
+    }
     if (h === 0) return `약 ${m}분`;
     if (m === 0) return `약 ${h}시간`;
     return `약 ${h}시간 ${m}분`;
-  };
-
-  // 품질 등급 색상
-  const gradeColors: Record<string, { bg: string; text: string; border: string }> = {
-    A: { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-200' },
-    B: { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-200' },
-    C: { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-200' },
-  };
-
-  // 진행률 기반 색상
-  const getProgressColor = (progress: number) => {
-    if (progress >= 90) return 'bg-amber-500';
-    if (progress >= 70) return 'bg-green-500';
-    return 'bg-blue-500';
   };
 
   // 이상 여부 확인

@@ -100,14 +100,14 @@ export interface TimePredictionResponse {
 
 // 품질 예측 응답
 export interface QualityPredictionResponse {
-  grade: 'A' | 'B' | 'C';
-  grade_label: string;
-  confidence: number;
+  predicted_grade: 'A' | 'B' | 'C';
   probabilities: {
     A: number;
     B: number;
     C: number;
   };
+  confidence: number;
+  risk_factors: string[];
 }
 
 // Claude 인사이트 응답
@@ -150,11 +150,11 @@ export interface DashboardState {
 // ============ 완료 시점 결정 ============
 export interface CompletionScenario {
   hours_from_now: number;
+  predicted_salinity: number;
   predicted_grade: string;
   grade_probabilities: Record<string, number>;
-  estimated_salinity: number;
   confidence: number;
-  recommendation: string;  // "권장" | "적정" | "위험"
+  is_recommended: boolean;
 }
 
 export interface CompletionDecisionResponse {
@@ -163,13 +163,13 @@ export interface CompletionDecisionResponse {
     elapsed_hours: number;
     current_salinity: number;
     initial_salinity: number;
+    water_temp: number;
     cultivar: string;
-    avg_weight: number;
     season: string;
   };
   scenarios: CompletionScenario[];
-  best_scenario: CompletionScenario;
   recommendation: string;
+  optimal_scenario_index: number;
   generated_at: string;
 }
 

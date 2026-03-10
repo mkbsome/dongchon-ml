@@ -112,3 +112,29 @@ class PredictionLogListResponse(BaseModel):
     """예측 로그 목록 응답"""
     total: int                      # 총 개수
     logs: List[PredictionLogResponse]
+
+
+# ============ Completion Decision Schemas ============
+class CompletionScenario(BaseModel):
+    """완료 시점 시나리오"""
+    hours_from_now: float           # 현재 시점 대비 추가 시간
+    predicted_salinity: float       # 예상 최종 염도
+    predicted_grade: str            # 예상 품질 등급 (A/B/C)
+    grade_probabilities: dict       # 등급별 확률
+    confidence: float               # 신뢰도
+    is_recommended: bool = False    # 추천 시점 여부
+
+
+class CompletionDecisionRequest(BaseModel):
+    """완료 시점 결정 요청"""
+    batch_id: int                   # 배치 ID
+
+
+class CompletionDecisionResponse(BaseModel):
+    """완료 시점 결정 응답"""
+    batch_id: int
+    current_status: dict            # 현재 배치 상태
+    scenarios: List[CompletionScenario]  # 시나리오별 예측
+    recommendation: str             # 추천 사항
+    optimal_scenario_index: int     # 최적 시나리오 인덱스 (0-based)
+    generated_at: str

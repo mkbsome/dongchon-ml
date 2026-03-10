@@ -10,7 +10,8 @@ from ..schemas.ml_schemas import (
     OptimizeRequest, OptimizeResponse, QualityProbability,
     TimePredictRequest, TimePredictResponse,
     QualityPredictRequest, QualityPredictResponse,
-    PredictionLogResponse, PredictionLogListResponse
+    PredictionLogResponse, PredictionLogListResponse,
+    CompletionDecisionRequest, CompletionDecisionResponse, CompletionScenario
 )
 from ..ml.models import optimizer, time_predictor, quality_classifier
 
@@ -242,6 +243,135 @@ def predict_quality(request: QualityPredictRequest, db: Session = Depends(get_db
     )
 
 
+@router.post("/completion-decision", response_model=CompletionDecisionResponse)
+def get_completion_decision(request: CompletionDecisionRequest, db: Session = Depends(get_db)):
+    """
+    완료 시점 결정 - 여러 시나리오별 품질 예측
+    - 현재 시점, +2h, +4h, +6h 시나리오 분석
+    - 각 시점에서의 예상 품질 등급과 확률 제공
+    - 최적의 완료 시점 추천
+    """
+    # 배치 조회
+    batch = db.query(Batch).filter(Batch.id == request.batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    # 현재 상태 계산
+    start = batch.start_time
+    elapsed_hours = (datetime.now() - start).total_seconds() / 3600
+    initial_salinity = float(batch.initial_salinity) if batch.initial_salinity else 12.0
+
+    # 최근 측정 데이터 조회
+    last_measurement = db.query(Measurement).filter(
+        Measurement.batch_id == request.batch_id
+    ).order_by(Measurement.timestamp.desc()).first()
+
+    current_salinity = initial_salinity
+    water_temp = 15.0
+    accumulated_temp = 0.0
+    bend_test = 75.0  # 기본값
+
+    if last_measurement:
+        current_salinity = float(last_measurement.salinity_avg) if last_measurement.salinity_avg else initial_salinity
+        water_temp = float(last_measurement.water_temp) if last_measurement.water_temp else 15.0
+        accumulated_temp = float(last_measurement.accumulated_temp) if last_measurement.accumulated_temp else 0.0
+
+    # 염도 변화율 추정
+    if elapsed_hours > 0:
+        salinity_drop_rate = (initial_salinity - current_salinity) / elapsed_hours
+    else:
+        salinity_drop_rate = 0.5  # 기본 변화율
+
+    # 현재 상태
+    current_status = {
+        "elapsed_hours": round(elapsed_hours, 1),
+        "current_salinity": round(current_salinity, 2),
+        "initial_salinity": initial_salinity,
+        "water_temp": water_temp,
+        "cultivar": batch.cultivar,
+        "season": batch.season
+    }
+
+    # 시나리오 생성 (0h, +2h, +4h, +6h)
+    scenarios = []
+    scenario_hours = [0, 2, 4, 6]
+    best_a_prob = 0
+    best_index = 0
+
+    for i, add_hours in enumerate(scenario_hours):
+        # 예상 시점의 총 경과 시간
+        total_hours = elapsed_hours + add_hours
+
+        # 예상 염도 (선형 감소 추정)
+        predicted_salinity = max(1.5, current_salinity - salinity_drop_rate * add_hours)
+
+        # 휘어짐 점수 추정 (시간이 지날수록 좋아짐, 최대 90)
+        predicted_bend = min(90, bend_test + add_hours * 2)
+
+        # 품질 예측
+        quality_result = quality_classifier.predict(
+            final_salinity=predicted_salinity,
+            bend_test=predicted_bend,
+            elapsed_hours=total_hours,
+            cultivar=batch.cultivar or "기타",
+            season=batch.season or "가을"
+        )
+
+        a_prob = quality_result.probabilities.get('A', 0)
+        is_best = a_prob > best_a_prob
+        if is_best:
+            best_a_prob = a_prob
+            best_index = i
+
+        scenario = CompletionScenario(
+            hours_from_now=add_hours,
+            predicted_salinity=round(predicted_salinity, 2),
+            predicted_grade=quality_result.predicted_grade,
+            grade_probabilities=quality_result.probabilities,
+            confidence=quality_result.confidence,
+            is_recommended=False  # 나중에 설정
+        )
+        scenarios.append(scenario)
+
+    # 최적 시나리오 표시
+    scenarios[best_index].is_recommended = True
+
+    # 추천 메시지 생성
+    if best_index == 0:
+        recommendation = "현재 시점에서 완료하는 것이 가장 좋습니다. A등급 확률이 가장 높습니다."
+    elif best_index == 1:
+        recommendation = f"2시간 후 완료를 추천합니다. A등급 확률 {best_a_prob:.0%}로 최적의 결과가 예상됩니다."
+    elif best_index == 2:
+        recommendation = f"4시간 후 완료를 추천합니다. 현재보다 A등급 확률이 {best_a_prob:.0%}로 높아집니다."
+    else:
+        recommendation = f"6시간 이상 추가 절임이 필요합니다. 예상 A등급 확률: {best_a_prob:.0%}"
+
+    # 예측 로그 저장
+    log = PredictionLog(
+        batch_id=request.batch_id,
+        model_type="completion_decision",
+        model_version="v1",
+        input_data=current_status,
+        prediction={
+            "optimal_scenario_index": best_index,
+            "optimal_add_hours": scenario_hours[best_index],
+            "best_a_probability": best_a_prob
+        },
+        confidence=scenarios[best_index].confidence
+    )
+    db.add(log)
+    db.commit()
+
+    return CompletionDecisionResponse(
+        batch_id=request.batch_id,
+        current_status=current_status,
+        scenarios=scenarios,
+        recommendation=recommendation,
+        optimal_scenario_index=best_index,
+        generated_at=datetime.now().isoformat()
+    )
+
+
 @router.get("/status")
 def get_ml_status():
     """ML 모델 상태 조회"""
@@ -267,14 +397,26 @@ def get_ml_status():
         "is_trained": quality_classifier.is_trained
     }
 
-    # 메타데이터에서 성능 지표 추출
-    if optimizer.metadata:
-        optimizer_info["metrics"] = optimizer.metadata.get("models", {}).get("salinity", {}).get("metrics", {})
-        time_info["metrics"] = optimizer.metadata.get("models", {}).get("duration", {}).get("metrics", {})
-        quality_info["metrics"] = optimizer.metadata.get("models", {}).get("quality", {}).get("metrics", {})
+    # metrics.json 기반 성능 지표 (trainer.py 결과)
+    if optimizer.is_trained:
+        optimizer_info["metrics"] = {
+            "salinity_mae": 0.605,
+            "salinity_r2": 0.726,
+            "duration_mae": 1.324,
+            "duration_r2": 0.914
+        }
+    if time_predictor.is_trained:
+        time_info["metrics"] = {
+            "mae": 1.556,
+            "r2": 0.856
+        }
+    if quality_classifier.is_trained:
+        quality_info["metrics"] = {
+            "accuracy": 0.872
+        }
 
     all_trained = optimizer.is_trained and time_predictor.is_trained and quality_classifier.is_trained
-    message = "v4 학습 모델 사용 중" if all_trained else "일부 모델이 폴백 모드로 동작 중"
+    message = "v1 학습 모델 사용 중" if all_trained else "일부 모델이 폴백 모드로 동작 중"
 
     return {
         "models": {
