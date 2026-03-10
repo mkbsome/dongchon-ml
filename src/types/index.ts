@@ -67,9 +67,10 @@ export interface OptimizationRequest {
   cultivar: string;              // 품종 (해남, 괴산, 강원 등)
   avg_weight: number;            // 평균 무게 (kg)
   firmness?: number;             // 경도 (0~100)
-  leaf_thickness?: number;       // 잎 두께
+  leaf_thickness?: number;       // 잎 두께 (mm)
   season: string;                // 계절 (봄, 여름, 가을, 겨울)
   room_temp?: number;            // 실내 온도
+  water_temp?: number;           // 염수 온도
   target_quality?: 'A' | 'B' | 'C';  // 목표 품질
 }
 

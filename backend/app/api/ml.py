@@ -18,20 +18,56 @@ from ..ml.models import optimizer, time_predictor, quality_classifier
 router = APIRouter(prefix="/ml", tags=["ml"])
 
 
+def convert_ui_firmness(ui_firmness: float) -> float:
+    """UI firmness (0-100) → 학습 데이터 firmness (5-22)"""
+    # UI 0 → 5, UI 100 → 22
+    return 5.0 + (ui_firmness / 100.0) * 17.0
+
+
+def convert_ui_leaf_thickness(ui_thickness: float) -> int:
+    """UI leaf_thickness (0.2-1.0 mm) → 학습 데이터 (1-5 mm)"""
+    # UI가 이미 mm 단위면 그대로, 아니면 스케일 조정
+    if ui_thickness < 1.5:
+        # 슬라이더가 0.2-1.0 범위인 경우 → 1-5로 스케일
+        return max(1, min(5, int(ui_thickness * 5)))
+    else:
+        # 이미 올바른 범위
+        return max(1, min(5, int(ui_thickness)))
+
+
+# 품종명 매핑 (프론트엔드 한글 → 학습 데이터 품종)
+CULTIVAR_MAP = {
+    '해남': '불암플러스',
+    '괴산': '불암3호',
+    '강원': '청명',
+    '충북': '휘파람골드',
+    '불암3호': '불암3호',
+    '불암플러스': '불암플러스',
+    '청명': '청명',
+    '휘파람골드': '휘파람골드',
+}
+
+
 @router.post("/optimize", response_model=OptimizeResponse)
 def optimize_process(request: OptimizeRequest, db: Session = Depends(get_db)):
     """
     공정 최적화 추천
     - 배추 특성과 환경 조건을 입력하면 최적의 초기 염도와 절임 시간을 추천
     """
+    # 피처 변환
+    firmness = convert_ui_firmness(request.firmness or 50.0)
+    leaf_thickness = convert_ui_leaf_thickness(request.leaf_thickness or 3.0)
+    cultivar = CULTIVAR_MAP.get(request.cultivar, request.cultivar)
+
     result = optimizer.predict(
-        cultivar=request.cultivar,
+        cultivar=cultivar,
         avg_weight=request.avg_weight,
-        firmness=request.firmness or 50.0,
-        leaf_thickness=request.leaf_thickness or 3.0,
+        firmness=firmness,
+        leaf_thickness=leaf_thickness,
         season=request.season,
-        room_temp=request.room_temp or 15.0,
-        target_quality=request.target_quality or "A"
+        room_temp=request.room_temp or 18.0,
+        target_quality=request.target_quality or "A",
+        water_temp=request.water_temp  # 계절별 기본값은 models.py에서 처리
     )
 
     # 예측 로그 저장

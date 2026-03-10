@@ -31,8 +31,8 @@ export function Optimize() {
   const [formData, setFormData] = useState<ExtendedForm>({
     cultivar: '해남',
     avg_weight: 3.0,
-    firmness: 70,
-    leaf_thickness: 0.5,
+    firmness: 70,           // UI: 0-100 스케일
+    leaf_thickness: 3,      // mm 단위 (학습 데이터: 1-5)
     room_temp: 18,
     season: '겨울',
     target_quality: 'A',
@@ -257,10 +257,10 @@ export function Optimize() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">잎 두께 (mm)</label>
-                    <input type="range" name="leaf_thickness" value={(formData.leaf_thickness || 0.5) * 100} onChange={(e) => setFormData(prev => ({ ...prev, leaf_thickness: parseInt(e.target.value) / 100 }))} min="20" max="100" className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
+                    <input type="range" name="leaf_thickness" value={formData.leaf_thickness || 3} onChange={(e) => setFormData(prev => ({ ...prev, leaf_thickness: parseInt(e.target.value) }))} min="1" max="5" step="1" className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
                     <div className="flex justify-between text-xs text-slate-400 mt-1">
                       <span>얇음</span>
-                      <span className="font-medium text-slate-600">{(formData.leaf_thickness || 0.5).toFixed(1)}mm</span>
+                      <span className="font-medium text-slate-600">{formData.leaf_thickness || 3}mm</span>
                       <span>두꺼움</span>
                     </div>
                   </div>

@@ -6,12 +6,13 @@ from datetime import datetime
 # ============ Optimization Schemas ============
 class OptimizeRequest(BaseModel):
     """공정 최적화 요청"""
-    cultivar: str                           # 품종
+    cultivar: str                           # 품종 (해남, 괴산 등)
     avg_weight: float                       # 평균 무게 (kg)
-    firmness: Optional[float] = 50.0        # 경도
-    leaf_thickness: Optional[float] = 3.0   # 잎 두께
+    firmness: Optional[float] = 50.0        # 경도 (UI: 0-100)
+    leaf_thickness: Optional[float] = 3.0   # 잎 두께 (mm)
     season: str                             # 계절
-    room_temp: Optional[float] = 15.0       # 실내 온도
+    room_temp: Optional[float] = 18.0       # 실내 온도
+    water_temp: Optional[float] = None      # 염수 온도 (None이면 계절 기본값)
     target_quality: Optional[str] = "A"     # 목표 품질
 
 

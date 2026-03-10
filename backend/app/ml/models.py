@@ -626,17 +626,22 @@ class QualityClassifier:
         bend_test: float,
         elapsed_hours: float,
         cultivar: str,
-        season: str
+        season: str,
+        avg_weight: float = 3.0,
+        initial_salinity: float = 12.0,
+        water_temp: float = None
     ) -> QualityPredictionResult:
         """품질 등급 예측"""
 
         if self.is_trained and self.model:
-            return self._predict_ml(final_salinity, bend_test, elapsed_hours, cultivar, season)
+            return self._predict_ml(final_salinity, bend_test, elapsed_hours, cultivar, season,
+                                    avg_weight, initial_salinity, water_temp)
         else:
             return self._predict_rule(final_salinity, bend_test, elapsed_hours, cultivar, season)
 
-    def _predict_ml(self, final_salinity, bend_test, elapsed_hours, cultivar, season) -> QualityPredictionResult:
-        """ML 모델 기반 예측 (7개 feature)"""
+    def _predict_ml(self, final_salinity, bend_test, elapsed_hours, cultivar, season,
+                    avg_weight=3.0, initial_salinity=12.0, water_temp=None) -> QualityPredictionResult:
+        """ML 모델 기반 예측 (8개 feature - trainer.py와 동일)"""
         try:
             # 품종 인코딩
             cultivar_encoded = 0
@@ -654,15 +659,22 @@ class QualityClassifier:
                 except ValueError:
                     season_encoded = 0
 
-            # 피처 준비: final_cabbage_salinity, bend_test, duration, cultivar, season, avg_weight, initial_salinity
+            # 수온 기본값 (계절별)
+            if water_temp is None:
+                water_temp_defaults = {'봄': 14, '여름': 22, '가을': 16, '겨울': 10}
+                water_temp = water_temp_defaults.get(season, 15)
+
+            # 피처 준비 (8개 - trainer.py prepare_quality_classifier_data와 동일)
+            # [final_salinity, quality_bending, duration, cultivar, season, avg_weight, initial_salinity, initial_water_temp]
             features = np.array([[
                 final_salinity,
                 bend_test,
                 elapsed_hours,
                 cultivar_encoded,
                 season_encoded,
-                3.0,   # avg_weight 기본값
-                12.0   # initial_salinity 기본값
+                avg_weight,
+                initial_salinity,
+                water_temp      # 8번째 피처 추가
             ]])
 
             # 스케일링
@@ -675,18 +687,21 @@ class QualityClassifier:
             pred_class = self.model.predict(features_scaled)[0]
             pred_proba = self.model.predict_proba(features_scaled)[0]
 
-            # 라벨 디코딩
+            # 라벨 디코딩 (좋음/양호/나쁨 → A/B/C)
+            GRADE_CONVERT = {'좋음': 'A', '양호': 'B', '나쁨': 'C'}
             if 'quality' in self.label_encoders:
-                predicted_grade = self.label_encoders['quality'].inverse_transform([pred_class])[0]
+                raw_grade = self.label_encoders['quality'].inverse_transform([pred_class])[0]
+                predicted_grade = GRADE_CONVERT.get(raw_grade, raw_grade)
             else:
                 predicted_grade = GRADE_MAP.get(int(pred_class), 'B')
 
-            # 확률 매핑 (클래스 순서: A, B, C 또는 0, 1, 2)
+            # 확률 매핑 (좋음/양호/나쁨 → A/B/C)
             probabilities = {}
-            classes = self.label_encoders.get('quality', None)
-            if classes and hasattr(classes, 'classes_'):
-                for i, cls in enumerate(classes.classes_):
-                    probabilities[cls] = round(float(pred_proba[i]), 2)
+            quality_encoder = self.label_encoders.get('quality', None)
+            if quality_encoder and hasattr(quality_encoder, 'classes_'):
+                for i, cls in enumerate(quality_encoder.classes_):
+                    grade_key = GRADE_CONVERT.get(cls, cls)
+                    probabilities[grade_key] = round(float(pred_proba[i]), 2)
             else:
                 probabilities = {
                     'A': round(float(pred_proba[0]) if len(pred_proba) > 0 else 0.33, 2),
