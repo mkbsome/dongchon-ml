@@ -37,9 +37,8 @@ venv/
 ENV/
 .env
 
-# Backend
-backend/*.db
-backend/dongchon.db
+# Backend - DB는 포함 (초기 데이터 포함)
+# backend/*.db
 
 # IDE
 .idea/
