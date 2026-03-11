@@ -380,127 +380,162 @@ def simulate_pickling_process(
             "salinity_diff": round(salinity_diff, 2),
         })
 
-    # 최종 배추 염도 계산 (목표: 1.5-2.0%)
-    # 물리적 요인 반영
-    base_final = 1.75  # 최적값 기준
+    # ============================================================
+    # 최종 배추 염도 계산 (v5 - 삼투압 평형 모델)
+    # ============================================================
+    # 물리적 원리 (Fick's Law + Van't Hoff):
+    # - 배추 초기 염도 ≈ 0.3% (천연 염분)
+    # - 삼투압에 의해 염분이 배추로 이동
+    # - 시간이 지나면 평형점으로 수렴 (완전 평형 시 배추 ≈ 염수의 30-40%)
+    # - 수온↑ → 침투 속도↑ (Arrhenius)
+    # - 무게↑, 경도↑ → 침투 저항↑
+    #
+    # 핵심 공식:
+    # final_salinity = cabbage_initial + (equilibrium - cabbage_initial) * (1 - exp(-k * t))
+    # 여기서:
+    #   equilibrium = initial_salinity * absorption_efficiency
+    #   k = rate_constant (온도, 무게, 경도 의존)
 
-    # 초기 염도 영향
-    salinity_effect = (initial_salinity - 12) * 0.03
+    duration_hours = duration_minutes / 60
+    cabbage_initial = 0.3  # 배추 천연 염분 0.3%
 
-    # 시간 영향 (최적 시간 대비)
+    # 평형 염도 (염수 염도의 일부가 배추에 도달)
+    # 배추는 염수의 약 20-25%까지 흡수 (조직 밀도, 삼투압 평형)
+    base_absorption = 0.22  # 기본 흡수 효율 22%
+
+    # ============================================================
+    # 배추 특성에 따른 흡수 효율 변화 (v7 - 균형 조정)
+    # ============================================================
+    # 물리적 원리:
+    # - 무게↑ → 부피/표면적 비율↑ → 침투 거리↑ → 흡수 효율↓
+    # - 경도↑ → 조직 밀도↑ → 침투 저항↑ → 흡수 효율↓
+    # - 잎두께↑ → 침투 거리↑ → 흡수 효율↓
+    #
+    # 목표: 같은 조건에서 배추 특성에 따라 ±0.3% 정도 변동
+
+    # 무게 효과: 작은 배추(2.5kg) → +6%, 큰 배추(3.5kg) → -6%
+    weight_effect = 1.0 - (avg_weight - 3.0) * 0.12
+    weight_effect = max(0.75, min(1.25, weight_effect))
+
+    # 경도 효과: 무른 배추(8N) → +10.5%, 단단한 배추(22N) → -10.5%
+    firmness_effect = 1.0 - (firmness - 15) * 0.015
+    firmness_effect = max(0.75, min(1.25, firmness_effect))
+
+    # 잎두께 효과: 얇은 잎(1mm) → +8%, 두꺼운 잎(5mm) → -8%
+    thickness_effect = 1.0 - (leaf_thickness - 3) * 0.04
+    thickness_effect = max(0.85, min(1.15, thickness_effect))
+
+    # 품종별 흡수율
+    absorption_rate = profile["absorption_rate"]
+
+    # 평형 염도 계산 (모든 효과 반영)
+    total_effect = weight_effect * firmness_effect * thickness_effect * absorption_rate
+    equilibrium = initial_salinity * base_absorption * total_effect
+
+    # 침투 속도 상수 (k)
+    # 수온↑ → 속도↑ (Arrhenius 근사)
+    temp_factor = math.exp((water_temp - 15) * 0.05)  # 온도 효과도 강화
+
+    # 기본 속도 상수 - 배추 특성에 따라 속도도 변화
+    k_base = 0.035  # h^-1
+    k = k_base * temp_factor / (weight_effect * firmness_effect * thickness_effect)
+
+    # 지수 감쇠 모델로 최종 염도 계산
+    penetration_ratio = 1 - math.exp(-k * duration_hours)
+    final_salinity = cabbage_initial + (equilibrium - cabbage_initial) * penetration_ratio
+
+    # 웃소금 효과: 추가 염분 공급
+    salt_boost = added_salt_amount * 0.002  # 40kg 웃소금 → +0.08%
+    final_salinity += salt_boost
+
+    # 노이즈 (공정 변동) - 현실적 변동폭
+    noise = random.gauss(0, 0.12)  # 표준편차 0.12%
+    final_salinity += noise
+
+    # 범위 제한 (물리적 가능 범위: 0.8% ~ 4%)
+    final_salinity = round(max(0.8, min(4.0, final_salinity)), 2)
+
+    # ============================================================
+    # 휘어짐 점수 (1-5점) - 물리 기반
+    # ============================================================
+    # 최적 절임 조건: 최종 염도 1.5~2.0%, 적정 시간
+    # 염도 부족(< 1.5%): 절임 부족 → 물러서 쉽게 꺾임 → 낮은 점수
+    # 염도 과다(> 2.0%): 과절임 → 질겨서 부러짐 → 낮은 점수
+    # 적정 염도: 탄력 유지 → 높은 점수
+
+    bending_base = 3.0
+
+    # 최종 염도에 따른 점수 (가장 중요)
+    if 1.6 <= final_salinity <= 1.9:
+        bending_base += 1.5  # 최적
+    elif 1.5 <= final_salinity <= 2.0:
+        bending_base += 0.8  # 양호
+    elif 1.3 <= final_salinity <= 2.2:
+        bending_base += 0.0  # 보통
+    elif 1.0 <= final_salinity <= 2.5:
+        bending_base -= 0.8  # 나쁨
+    elif 0.8 <= final_salinity <= 3.0:
+        bending_base -= 1.2  # 매우 나쁨
+    else:
+        bending_base -= 1.8  # 심각 (과/부족)
+
+    # 침투 균일성 (시간 적정성 반영)
     optimal_duration = (mode_config["duration_hours"][0] + mode_config["duration_hours"][1]) / 2 * 60
     time_deviation = (duration_minutes - optimal_duration) / optimal_duration
-    time_effect = time_deviation * 0.15
 
-    # 온도 영향 (높으면 침투 빠름 → 염도 높음)
-    temp_effect = (water_temp - 15) * 0.01
-
-    # 배추 특성 영향
-    weight_effect = (avg_weight - 3.0) * 0.02
-    firmness_effect = (firmness - 15) * 0.01
-
-    final_salinity = base_final + salinity_effect + time_effect + temp_effect - weight_effect + firmness_effect
-    final_salinity += random.uniform(-0.15, 0.15)
-    final_salinity = round(max(1.2, min(2.4, final_salinity)), 2)
-
-    # 휘어짐 점수 (1-5점)
-    # 최적 조건일수록 높은 점수
-    bending_base = 3.5
-
-    # 최종 염도가 적정 범위일수록 좋음
-    if 1.7 <= final_salinity <= 1.9:
-        bending_base += 1.2
-    elif 1.5 <= final_salinity <= 2.0:
-        bending_base += 0.5
-    elif final_salinity < 1.4 or final_salinity > 2.2:
-        bending_base -= 1.0
-
-    # 시간 적정성
-    if abs(time_deviation) < 0.1:
-        bending_base += 0.3
-    elif abs(time_deviation) > 0.2:
-        bending_base -= 0.3
-
-    bending_score = int(round(max(1, min(5, bending_base + random.uniform(-0.5, 0.5)))))
-
-    # 품질 등급 결정 - 현실적 분포: 좋음 70-80%, 양호 15-20%, 나쁨 5-10%
-    # 직접적인 확률 기반 접근
-
-    # 기본 품질 점수 (0-100)
-    quality_score = 50
-
-    # 염도 기반 점수 (가장 중요)
-    if 1.7 <= final_salinity <= 1.9:
-        salinity_quality = 1.0  # 최적
-    elif 1.6 <= final_salinity <= 2.0:
-        salinity_quality = 0.8  # 양호
-    elif 1.5 <= final_salinity <= 2.1:
-        salinity_quality = 0.5  # 허용
-    elif 1.4 <= final_salinity <= 2.2:
-        salinity_quality = 0.2  # 경계
+    if abs(time_deviation) < 0.05:
+        bending_base += 0.3  # 매우 적정
+    elif abs(time_deviation) < 0.15:
+        bending_base += 0.0  # 적정
+    elif abs(time_deviation) < 0.25:
+        bending_base -= 0.3  # 약간 벗어남
     else:
-        salinity_quality = 0.0  # 불량
+        bending_base -= 0.6  # 많이 벗어남
 
-    # 휘어짐 기반 점수
-    bending_quality = (bending_score - 1) / 4.0  # 0.0 ~ 1.0
+    # 변동성
+    bending_score = int(round(max(1, min(5, bending_base + random.uniform(-0.4, 0.4)))))
 
-    # 시간 적정성 점수
-    if abs(time_deviation) < 0.1:
-        time_quality = 1.0
-    elif abs(time_deviation) < 0.2:
-        time_quality = 0.7
-    elif abs(time_deviation) < 0.3:
-        time_quality = 0.4
+    # ============================================================
+    # 품질 등급 결정 - 핵심: 최종 염도 1.5~2.0%가 타겟
+    # ============================================================
+    # 품질 = f(최종염도, 휘어짐점수)
+    # 최종 염도가 타겟 범위(1.5~2.0%)에 있으면 좋음
+
+    # 염도 기반 점수 (0~1, 가장 중요)
+    if 1.5 <= final_salinity <= 2.0:
+        # 타겟 범위 내
+        if 1.6 <= final_salinity <= 1.9:
+            salinity_quality = 1.0  # 최적 (중심부)
+        else:
+            salinity_quality = 0.85  # 양호 (가장자리)
+    elif 1.3 <= final_salinity <= 2.2:
+        # 허용 범위
+        deviation = min(abs(final_salinity - 1.5), abs(final_salinity - 2.0))
+        salinity_quality = max(0.3, 0.7 - deviation * 2)
+    elif 1.0 <= final_salinity <= 2.8:
+        # 경계 범위 (과절임 또는 부족)
+        deviation = min(abs(final_salinity - 1.5), abs(final_salinity - 2.0))
+        salinity_quality = max(0.1, 0.4 - deviation * 0.5)
     else:
-        time_quality = 0.1
+        # 심각하게 벗어남 (염도 < 1.0% 또는 > 2.8%)
+        salinity_quality = 0.0
 
-    # 종합 품질 (가중 평균: 염도 50%, 휘어짐 30%, 시간 20%)
-    overall_quality = salinity_quality * 0.5 + bending_quality * 0.3 + time_quality * 0.2
+    # 휘어짐 기반 점수 (0~1)
+    bending_quality = (bending_score - 1) / 4.0
 
-    # 확률 기반 등급 결정 (목표: 좋음 75%, 양호 18%, 나쁨 7%)
-    # overall_quality에 따라 확률 조정
-    rand = random.random()
+    # 종합 품질 (염도 70%, 휘어짐 30%)
+    overall_quality = salinity_quality * 0.7 + bending_quality * 0.3
 
-    if overall_quality >= 0.8:
-        # 고품질: 좋음 80%, 양호 15%, 나쁨 5%
-        if rand < 0.80:
-            quality_grade = "좋음"
-        elif rand < 0.95:
-            quality_grade = "양호"
-        else:
-            quality_grade = "나쁨"
-    elif overall_quality >= 0.6:
-        # 중상품질: 좋음 60%, 양호 30%, 나쁨 10%
-        if rand < 0.60:
-            quality_grade = "좋음"
-        elif rand < 0.90:
-            quality_grade = "양호"
-        else:
-            quality_grade = "나쁨"
-    elif overall_quality >= 0.4:
-        # 중품질: 좋음 35%, 양호 45%, 나쁨 20%
-        if rand < 0.35:
-            quality_grade = "좋음"
-        elif rand < 0.80:
-            quality_grade = "양호"
-        else:
-            quality_grade = "나쁨"
-    elif overall_quality >= 0.2:
-        # 중하품질: 좋음 10%, 양호 40%, 나쁨 50%
-        if rand < 0.10:
-            quality_grade = "좋음"
-        elif rand < 0.50:
-            quality_grade = "양호"
-        else:
-            quality_grade = "나쁨"
+    # 등급 결정 (결정론적 + 약간의 노이즈)
+    noise = random.gauss(0, 0.05)
+    adjusted_quality = overall_quality + noise
+
+    if adjusted_quality >= 0.75:
+        quality_grade = "좋음"
+    elif adjusted_quality >= 0.45:
+        quality_grade = "양호"
     else:
-        # 저품질: 좋음 0%, 양호 20%, 나쁨 80%
-        if rand < 0.00:
-            quality_grade = "좋음"
-        elif rand < 0.20:
-            quality_grade = "양호"
-        else:
-            quality_grade = "나쁨"
+        quality_grade = "나쁨"
 
     return duration_minutes, final_salinity, bending_score, quality_grade, measurements
 
