@@ -13,7 +13,7 @@ from ..schemas.ml_schemas import (
     PredictionLogResponse, PredictionLogListResponse,
     CompletionDecisionRequest, CompletionDecisionResponse, CompletionScenario
 )
-from ..ml.models import optimizer, time_predictor, quality_classifier
+from ..ml.models import optimizer, time_predictor, quality_classifier, calculate_corrected_duration
 
 router = APIRouter(prefix="/ml", tags=["ml"])
 
@@ -408,10 +408,80 @@ def get_completion_decision(request: CompletionDecisionRequest, db: Session = De
     )
 
 
+@router.post("/recalculate-duration")
+def recalculate_duration(
+    salinity: float = Query(..., description="조정된 초기 염도 (%)"),
+    season: str = Query(..., description="계절"),
+    water_temp: float = Query(None, description="염수 온도 (°C)"),
+    avg_weight: float = Query(3.0, description="배추 평균 무게 (kg)"),
+    base_duration: float = Query(None, description="기존 예측 시간 (없으면 계절 기본값)")
+):
+    """
+    염도 조정에 따른 절임 시간 재계산
+
+    사용자가 슬라이더로 염도를 조정하면 이 API를 호출하여
+    상호 연관된 절임 시간을 동적으로 업데이트합니다.
+    """
+    # 수온 기본값
+    if water_temp is None:
+        water_temp_defaults = {'봄': 14, '여름': 22, '가을': 16, '겨울': 10}
+        water_temp = water_temp_defaults.get(season, 15)
+
+    # 기본 시간 (수온 기반 - 계절이 아닌 온도가 핵심)
+    if base_duration is None:
+        if water_temp <= 10:
+            base_duration = 46.0  # 저온: 이틀절임 수준
+        elif water_temp >= 22:
+            base_duration = 22.0  # 고온: 하루절임 수준
+        else:
+            # 10°C ~ 22°C 사이 선형 보간
+            base_duration = 46.0 - (water_temp - 10) * (46.0 - 22.0) / (22 - 10)
+
+    # 후처리 보정 적용
+    corrected_duration = calculate_corrected_duration(
+        base_duration=base_duration,
+        salinity=salinity,
+        water_temp=water_temp,
+        season=season,
+        avg_weight=avg_weight
+    )
+
+    # 기본 염도 대비 변화 설명
+    season_base_salinity = {
+        '겨울': 10.5,
+        '여름': 13.0,
+        '봄': 12.0,
+        '가을': 12.0
+    }
+    base_salinity = season_base_salinity.get(season, 12.0)
+    salinity_diff = salinity - base_salinity
+
+    if salinity_diff > 0.5:
+        direction = "높은 염도로 인해 절임 시간 단축"
+    elif salinity_diff < -0.5:
+        direction = "낮은 염도로 인해 절임 시간 증가"
+    else:
+        direction = "계절 기준 적정 범위 내"
+
+    return {
+        "adjusted_salinity": round(salinity, 1),
+        "recalculated_duration": corrected_duration,
+        "base_duration": base_duration,
+        "duration_change": round(corrected_duration - base_duration, 1),
+        "direction": direction,
+        "water_temp": water_temp,
+        "season": season
+    }
+
+
 @router.get("/status")
 def get_ml_status():
-    """ML 모델 상태 조회"""
-    # 실제 모델 정보 조회
+    """ML 모델 상태 조회 (v2 메타데이터 연동)"""
+    # 메타데이터에서 성능 지표 가져오기
+    opt_meta = optimizer.metadata.get('metrics', {})
+    time_meta = time_predictor.metadata.get('metrics', {})
+    qual_meta = quality_classifier.metadata.get('metrics', {})
+
     optimizer_info = {
         "type": "GradientBoostingRegressor" if optimizer.is_trained else "Rule-based",
         "status": "trained" if optimizer.is_trained else "fallback",
@@ -433,26 +503,38 @@ def get_ml_status():
         "is_trained": quality_classifier.is_trained
     }
 
-    # metrics.json 기반 성능 지표 (trainer.py 결과)
-    if optimizer.is_trained:
+    # v2 메타데이터에서 성능 지표 로드
+    if optimizer.is_trained and opt_meta:
+        duration_m = opt_meta.get('optimizer_duration', {})
+        salinity_m = opt_meta.get('optimizer_salinity', {})
         optimizer_info["metrics"] = {
-            "salinity_mae": 0.605,
-            "salinity_r2": 0.726,
-            "duration_mae": 1.324,
-            "duration_r2": 0.914
+            "duration_mae": round(duration_m.get('mae', 0), 3),
+            "duration_r2": round(duration_m.get('r2', 0), 3),
+            "salinity_mae": round(salinity_m.get('mae', 0), 3),
+            "salinity_r2": round(salinity_m.get('r2', 0), 3),
+            "duration_features": duration_m.get('features', []),
         }
-    if time_predictor.is_trained:
+    if time_predictor.is_trained and time_meta:
+        tp_m = time_meta.get('time_predictor', {})
         time_info["metrics"] = {
-            "mae": 1.556,
-            "r2": 0.856
+            "mae": round(tp_m.get('mae', 0), 3),
+            "r2": round(tp_m.get('r2', 0), 3),
+            "features": tp_m.get('features', []),
         }
-    if quality_classifier.is_trained:
+    if quality_classifier.is_trained and qual_meta:
+        qc_m = qual_meta.get('quality_classifier', {})
         quality_info["metrics"] = {
-            "accuracy": 0.872
+            "accuracy": round(qc_m.get('accuracy', 0), 3),
+            "f1_weighted": round(qc_m.get('f1_weighted', 0), 3),
+            "features": qc_m.get('features', []),
         }
 
     all_trained = optimizer.is_trained and time_predictor.is_trained and quality_classifier.is_trained
-    message = "v1 학습 모델 사용 중" if all_trained else "일부 모델이 폴백 모드로 동작 중"
+    version = optimizer.model_version if optimizer.is_trained else "fallback"
+    message = f"{version} 학습 모델 사용 중" if all_trained else "일부 모델이 폴백 모드로 동작 중"
+
+    # v2 변경사항 추가
+    changes = optimizer.metadata.get('changes', [])
 
     return {
         "models": {
@@ -460,7 +542,9 @@ def get_ml_status():
             "time_predictor": time_info,
             "quality_classifier": quality_info
         },
-        "message": message
+        "message": message,
+        "version": version,
+        "changes": changes
     }
 
 

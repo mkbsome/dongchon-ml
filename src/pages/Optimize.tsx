@@ -47,6 +47,11 @@ export function Optimize() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 염도 조정 상태
+  const [adjustedSalinity, setAdjustedSalinity] = useState<number | null>(null);
+  const [adjustedDuration, setAdjustedDuration] = useState<number | null>(null);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
   // 완료 시점 결정
   const [activeBatches, setActiveBatches] = useState<Batch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
@@ -78,6 +83,8 @@ export function Optimize() {
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setAdjustedSalinity(null);
+    setAdjustedDuration(null);
 
     try {
       const optimizationResult = await mlApi.optimize(formData);
@@ -99,6 +106,34 @@ export function Optimize() {
       setError('백엔드 연결 오류 - 기본값으로 계산됨');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 염도 조정 시 시간 재계산
+  const handleSalinityAdjust = async (newSalinity: number) => {
+    setAdjustedSalinity(newSalinity);
+    setIsRecalculating(true);
+
+    try {
+      const response = await fetch(
+        `http://localhost:8000/api/ml/recalculate-duration?salinity=${newSalinity}&season=${encodeURIComponent(formData.season)}&water_temp=${formData.water_temp || 15}&avg_weight=${formData.avg_weight}&base_duration=${result?.recommended_duration || 28}`,
+        { method: 'POST' }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setAdjustedDuration(data.recalculated_duration);
+      }
+    } catch (err) {
+      console.error('Recalculation failed:', err);
+      // 폴백: 간단한 선형 계산
+      const baseSalinity = result?.recommended_salinity || 12;
+      const baseDuration = result?.recommended_duration || 28;
+      const salinityDiff = newSalinity - baseSalinity;
+      const durationChange = salinityDiff * -6;
+      setAdjustedDuration(Math.max(18, Math.min(48, baseDuration + durationChange)));
+    } finally {
+      setIsRecalculating(false);
     }
   };
 
@@ -380,15 +415,69 @@ export function Optimize() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-slate-50 rounded-lg p-4">
                       <p className="text-xs text-slate-500 mb-1">권장 초기염도</p>
-                      <p className="text-2xl font-bold text-slate-800">{result.recommended_salinity}%</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {adjustedSalinity !== null ? adjustedSalinity : result.recommended_salinity}%
+                        {adjustedSalinity !== null && adjustedSalinity !== result.recommended_salinity && (
+                          <span className="text-xs font-normal text-amber-600 ml-2">
+                            (기본: {result.recommended_salinity}%)
+                          </span>
+                        )}
+                      </p>
                     </div>
                     <div className="bg-slate-50 rounded-lg p-4">
                       <p className="text-xs text-slate-500 mb-1">권장 절임시간</p>
-                      <p className="text-2xl font-bold text-slate-800">
-                        {Math.floor(result.recommended_duration)}시간
-                        {Math.round((result.recommended_duration % 1) * 60) > 0 && ` ${Math.round((result.recommended_duration % 1) * 60)}분`}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-2xl font-bold text-slate-800">
+                          {(() => {
+                            const duration = adjustedDuration !== null ? adjustedDuration : result.recommended_duration;
+                            return `${Math.floor(duration)}시간${Math.round((duration % 1) * 60) > 0 ? ` ${Math.round((duration % 1) * 60)}분` : ''}`;
+                          })()}
+                        </p>
+                        {isRecalculating && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
+                      </div>
+                      {adjustedDuration !== null && adjustedDuration !== result.recommended_duration && (
+                        <span className="text-xs text-amber-600">
+                          (기본: {Math.floor(result.recommended_duration)}시간)
+                        </span>
+                      )}
                     </div>
+                  </div>
+
+                  {/* 염도 조정 슬라이더 */}
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-blue-800">염도 조정</p>
+                      <span className="text-xs text-blue-600">
+                        염도 ↑ → 시간 ↓ | 염도 ↓ → 시간 ↑
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="8"
+                      max="15"
+                      step="0.5"
+                      value={adjustedSalinity !== null ? adjustedSalinity : result.recommended_salinity}
+                      onChange={(e) => handleSalinityAdjust(parseFloat(e.target.value))}
+                      className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-xs text-blue-500 mt-1">
+                      <span>8%</span>
+                      <span className="font-medium text-blue-700">
+                        {adjustedSalinity !== null ? adjustedSalinity : result.recommended_salinity}%
+                      </span>
+                      <span>15%</span>
+                    </div>
+                    {adjustedSalinity !== null && adjustedSalinity !== result.recommended_salinity && (
+                      <button
+                        onClick={() => {
+                          setAdjustedSalinity(null);
+                          setAdjustedDuration(null);
+                        }}
+                        className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                      >
+                        기본값으로 초기화
+                      </button>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-3 gap-3 pt-4 border-t border-slate-100">

@@ -1,0 +1,153 @@
+{
+  "version": "v2",
+  "created_at": "2026-03-11T06:29:12.381371",
+  "metrics": {
+    "optimizer_duration": {
+      "mae": 1.3209354686178112,
+      "r2": 0.9531958957213913,
+      "train_samples": 464,
+      "test_samples": 116,
+      "features": [
+        "cultivar_encoded",
+        "avg_weight",
+        "firmness",
+        "leaf_thickness",
+        "season_encoded",
+        "room_temp",
+        "initial_water_temp",
+        "initial_salinity",
+        "outdoor_temp",
+        "added_salt_amount",
+        "vant_hoff_osmotic",
+        "weight_firmness"
+      ]
+    },
+    "optimizer_salinity": {
+      "mae": 0.7025034615437489,
+      "r2": -0.2286438156575552,
+      "train_samples": 440,
+      "test_samples": 111,
+      "features": [
+        "cultivar_encoded",
+        "avg_weight",
+        "firmness",
+        "leaf_thickness",
+        "season_encoded",
+        "room_temp",
+        "initial_water_temp",
+        "outdoor_temp"
+      ]
+    },
+    "time_predictor": {
+      "mae": 1.062767438577893,
+      "r2": 0.9689675603315454,
+      "train_samples": 2984,
+      "test_samples": 747,
+      "features": [
+        "elapsed_hours",
+        "salinity_avg",
+        "initial_salinity",
+        "water_temp",
+        "accumulated_temp",
+        "salinity_diff",
+        "osmotic_index"
+      ]
+    },
+    "quality_classifier": {
+      "accuracy": 0.9568965517241379,
+      "f1_weighted": 0.9584559669585649,
+      "train_samples": 464,
+      "test_samples": 116,
+      "features": [
+        "final_salinity",
+        "quality_bending",
+        "duration_hours",
+        "cultivar_encoded",
+        "season_encoded",
+        "avg_weight",
+        "initial_salinity",
+        "initial_water_temp"
+      ]
+    },
+    "final_salinity_predictor": {
+      "mae": 0.07942786386368923,
+      "r2": 0.32678668647422815,
+      "train_samples": 464,
+      "test_samples": 116,
+      "features": [
+        "initial_salinity",
+        "duration_hours",
+        "initial_water_temp",
+        "avg_weight",
+        "firmness",
+        "leaf_thickness",
+        "vant_hoff_osmotic",
+        "cultivar_encoded",
+        "season_encoded"
+      ]
+    }
+  },
+  "feature_names": {
+    "optimizer_duration": [
+      "cultivar_encoded",
+      "avg_weight",
+      "firmness",
+      "leaf_thickness",
+      "season_encoded",
+      "room_temp",
+      "initial_water_temp",
+      "initial_salinity",
+      "outdoor_temp",
+      "added_salt_amount",
+      "vant_hoff_osmotic",
+      "weight_firmness"
+    ],
+    "optimizer_salinity": [
+      "cultivar_encoded",
+      "avg_weight",
+      "firmness",
+      "leaf_thickness",
+      "season_encoded",
+      "room_temp",
+      "initial_water_temp",
+      "outdoor_temp"
+    ],
+    "time_predictor": [
+      "elapsed_hours",
+      "salinity_avg",
+      "initial_salinity",
+      "water_temp",
+      "accumulated_temp",
+      "salinity_diff",
+      "osmotic_index"
+    ],
+    "quality_classifier": [
+      "final_salinity",
+      "quality_bending",
+      "duration_hours",
+      "cultivar_encoded",
+      "season_encoded",
+      "avg_weight",
+      "initial_salinity",
+      "initial_water_temp"
+    ],
+    "final_salinity_predictor": [
+      "initial_salinity",
+      "duration_hours",
+      "initial_water_temp",
+      "avg_weight",
+      "firmness",
+      "leaf_thickness",
+      "vant_hoff_osmotic",
+      "cultivar_encoded",
+      "season_encoded"
+    ]
+  },
+  "changes": [
+    "pickling_type 피처 제거 (데이터 누수 해결)",
+    "initial_salinity를 시간 예측 피처로 추가",
+    "vant_hoff_osmotic 파생변수 추가",
+    "weight_firmness 파생변수 추가",
+    "Gradient Boosting 모델 적용"
+  ]
+}
